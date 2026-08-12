@@ -679,6 +679,24 @@ func (e *Engine) Start(netbirdConfig *mgmProto.NetbirdConfig, mgmtURL *url.URL) 
 	}
 	e.wgDevice.Store(e.wgInterface.GetWGDevice())
 
+	// When client route management is disabled (netbird embedded into a
+	// TUN-based proxy such as sing-box), routemanager's SetupRouting — which
+	// normally installs the control-plane fwmark rule — is skipped, leaving
+	// the marked ICE/STUN sockets unrouted. Without the rule the probes go
+	// through the proxy's TUN (source IP becomes the TUN's), the NAT mapping
+	// points at a TUN-internal address and the return path never reaches the
+	// engine socket: hole punching silently fails. Install the rule here so
+	// control-plane traffic always egresses via the physical interface.
+	//
+	// The condition mirrors routemanager's own "noop manager" decision
+	// (netstack.IsEnabled() || DisableClientRoutes): whenever routemanager
+	// does not install the rule itself, we install it here.
+	if e.config.DisableClientRoutes || nbnetstack.IsEnabled() {
+		if err := installControlPlaneMarkRule(); err != nil {
+			log.Warnf("install control-plane mark rule: %v", err)
+		}
+	}
+
 	// Start after interface is up since port may have been resolved from 0 or changed if occupied
 	e.shutdownWg.Add(1)
 	go func() {
