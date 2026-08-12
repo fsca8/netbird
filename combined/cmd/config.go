@@ -301,7 +301,7 @@ func (c *CombinedConfig) ApplySimplifiedDefaults() {
 		c.Server.StunPorts = []int{3478}
 	}
 
-	c.applyRelayDefaults(exposedProto, exposedHostPort, hasExternalRelay, hasExternalStuns)
+	c.applyRelayDefaults(exposedProto, exposedHostPort, hasExternalRelay)
 	c.applySignalDefaults(hasExternalSignal)
 	c.applyManagementDefaults(exposedHost)
 
@@ -323,7 +323,10 @@ func (c *CombinedConfig) ApplyAdminDefaults() {
 }
 
 // applyRelayDefaults configures the relay service if no external relay is configured.
-func (c *CombinedConfig) applyRelayDefaults(exposedProto, exposedHostPort string, hasExternalRelay, hasExternalStuns bool) {
+// Local STUN listeners are driven solely by stunPorts — independent of external
+// stuns. (Previously, configuring external stuns silently disabled the local
+// STUN listener, a surprising coupling fixed on the my_custom_server branch.)
+func (c *CombinedConfig) applyRelayDefaults(exposedProto, exposedHostPort string, hasExternalRelay bool) {
 	if hasExternalRelay {
 		return
 	}
@@ -339,8 +342,9 @@ func (c *CombinedConfig) applyRelayDefaults(exposedProto, exposedHostPort string
 		c.Relay.LogLevel = c.Server.LogLevel
 	}
 
-	// Enable local STUN only if no external STUN servers and stunPorts are configured
-	if !hasExternalStuns && len(c.Server.StunPorts) > 0 {
+	// Enable local STUN whenever stunPorts are configured, even when external
+	// STUN servers are also set (decoupled: both can coexist).
+	if len(c.Server.StunPorts) > 0 {
 		c.Relay.Stun.Enabled = true
 		c.Relay.Stun.Ports = c.Server.StunPorts
 		if c.Relay.Stun.LogLevel == "" {
@@ -402,8 +406,21 @@ func (c *CombinedConfig) autoConfigureClientSettings(exposedProto, exposedHost, 
 
 	// Configure STUN servers for clients
 	if hasExternalStuns {
-		// Use external STUN servers from server config
+		// Use external STUN servers from server config, plus local stunPorts
+		// when configured — the two are no longer mutually exclusive
+		// (decoupled, see applyRelayDefaults).
 		c.Management.Stuns = c.Server.Stuns
+		existing := map[string]bool{}
+		for _, s := range c.Management.Stuns {
+			existing[s.URI] = true
+		}
+		for _, port := range c.Server.StunPorts {
+			uri := "stun:" + net.JoinHostPort(strings.Trim(exposedHost, "[]"), fmt.Sprintf("%d", port))
+			if !existing[uri] {
+				c.Management.Stuns = append(c.Management.Stuns, HostConfig{URI: uri})
+				existing[uri] = true
+			}
+		}
 	} else if len(c.Server.StunPorts) > 0 && len(c.Management.Stuns) == 0 {
 		// Auto-configure local STUN servers for all ports
 		for _, port := range c.Server.StunPorts {
