@@ -628,6 +628,20 @@ func (e *Engine) Start(netbirdConfig *mgmProto.NetbirdConfig, mgmtURL *url.URL) 
 		return fmt.Errorf("up wg interface: %w", err)
 	}
 
+	// When client route management is disabled (netbird embedded into a
+	// TUN-based proxy such as sing-box), routemanager's SetupRouting — which
+	// normally installs the control-plane fwmark rule — is skipped, leaving
+	// the marked ICE/STUN sockets unrouted. Without the rule the probes go
+	// through the proxy's TUN (source IP becomes the TUN's), the NAT mapping
+	// points at a TUN-internal address and the return path never reaches the
+	// engine socket: hole punching silently fails. Install the rule here so
+	// control-plane traffic always egresses via the physical interface.
+	if e.config.DisableClientRoutes {
+		if err := installControlPlaneMarkRule(); err != nil {
+			log.Warnf("install control-plane mark rule: %v", err)
+		}
+	}
+
 	// Set up notrack rules immediately after proxy is listening to prevent
 	// conntrack entries from being created before the rules are in place
 	e.setupWGProxyNoTrack()
