@@ -45,8 +45,17 @@ func NewAgent(ctx context.Context, iFaceDiscover stdnet.ExternalIFaceDiscover, c
 	}
 
 	fac := logging.NewDefaultLoggerFactory()
+	fac.DefaultLogLevel = logging.LogLevelDebug
+	fac.Writer = log.StandardLogger().Writer()
 
-	//fac.Writer = log.StandardLogger().Writer()
+	var stunURLs []string
+	for _, u := range config.StunTurn.Load() {
+		if u != nil {
+			stunURLs = append(stunURLs, u.String())
+		}
+	}
+	log.Infof("ICE agent: STUN/TURN=%v candidateTypes=%v NAT1To1=%v DisableIPv6=%v",
+		stunURLs, candidateTypes, config.NATExternalIPs, config.DisableIPv6Discovery)
 
 	agentConfig := &ice.AgentConfig{
 		MulticastDNSMode:       ice.MulticastDNSModeDisabled,
