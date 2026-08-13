@@ -181,7 +181,7 @@ func (w *WorkerICE) OnNewOffer(remoteOfferAnswer *OfferAnswer) {
 func (w *WorkerICE) OnRemoteCandidate(candidate ice.Candidate, haRoutes route.HAMap) {
 	w.muxAgent.Lock()
 	defer w.muxAgent.Unlock()
-	w.log.Debugf("OnRemoteCandidate from peer %s -> %s", w.config.Key, candidate.String())
+	w.log.Infof("OnRemoteCandidate from peer %s -> %s", w.config.Key, candidate.String())
 	if w.agent == nil {
 		w.log.Warnf("ICE Agent is not initialized yet")
 		return
@@ -348,6 +348,7 @@ func (w *WorkerICE) connect(ctx context.Context, dialerCancel context.CancelFunc
 		Relayed:                    isRelayed(pair),
 		RelayedOnLocal:             isRelayCandidate(pair.Local),
 	}
+	w.log.Infof("ICE dial done: local=%s remote=%s relayed=%v", pair.Local.String(), pair.Remote.String(), isRelayed(pair))
 	w.log.Debugf("on ICE conn is ready to use")
 
 	w.log.Infof("connection succeeded with offer session: %s", remoteOfferAnswer.SessionIDString())
@@ -453,7 +454,7 @@ func (w *WorkerICE) onICECandidate(candidate ice.Candidate) {
 	}
 
 	// TODO: reported port is incorrect for CandidateTypeHost, makes understanding ICE use via logs confusing as port is ignored
-	w.log.Debugf("discovered local candidate %s", candidate.String())
+	w.log.Infof("discovered local candidate %s", candidate.String())
 	go func() {
 		err := w.signaler.SignalICECandidate(candidate, w.config.Key)
 		if err != nil {
@@ -562,7 +563,7 @@ func (w *WorkerICE) createForwardedCandidate(srflxCandidate ice.Candidate, mappi
 
 func (w *WorkerICE) onICESelectedCandidatePair(sampleNow chan<- struct{}) func(c1, c2 ice.Candidate) {
 	return func(c1, c2 ice.Candidate) {
-		w.log.Debugf("selected candidate pair [local <-> remote] -> [%s <-> %s], peer %s", c1.String(), c2.String(),
+		w.log.Infof("selected candidate pair [local <-> remote] -> [%s <-> %s], peer %s", c1.String(), c2.String(),
 			w.config.Key)
 
 		// refresh the recorded latency right away: it still describes the previous
@@ -641,7 +642,7 @@ func (w *WorkerICE) logSuccessfulPaths(agent *icemaker.ThreadSafeAgent) {
 			if !lok || !rok {
 				continue
 			}
-			w.log.Debugf("successful ICE path %s: [%s %s %s:%d] <-> [%s %s %s:%d] rtt=%.3fms",
+			w.log.Infof("successful ICE path %s: [%s %s %s:%d] <-> [%s %s %s:%d] rtt=%.3fms",
 				sessionID,
 				local.NetworkType(), local.Type(), local.Address(), local.Port(),
 				remote.NetworkType(), remote.Type(), remote.Address(), remote.Port(),
@@ -652,7 +653,7 @@ func (w *WorkerICE) logSuccessfulPaths(agent *icemaker.ThreadSafeAgent) {
 
 func (w *WorkerICE) onConnectionStateChange(agent *icemaker.ThreadSafeAgent, dialerCancel context.CancelFunc) func(ice.ConnectionState) {
 	return func(state ice.ConnectionState) {
-		w.log.Debugf("ICE ConnectionState has changed to %s", state.String())
+		w.log.Infof("ICE ConnectionState has changed to %s", state.String())
 		switch state {
 		case ice.ConnectionStateConnected:
 			w.lastKnownState = ice.ConnectionStateConnected
