@@ -177,6 +177,11 @@ func New(opts Options) (*Client, error) {
 		if err := os.Setenv(netstack.EnvSkipProxy, "true"); err != nil {
 			return nil, fmt.Errorf("setenv: %w", err)
 		}
+		// 嵌入模式: userspace(netstack)被宿主(如 sing-box)嵌入时, 控制面 socket
+		// (STUN/ICE/WireGuard)启用平台旁路(Windows IP_UNICAST_IF / Android protect /
+		// Linux fwmark), 绕过宿主 TUN。否则探测流量被宿主 TUN 劫持(源 IP 变 TUN 内部
+		// 地址, NAT 回程丢失), srflx 发现不了, P2P 永远失败走 relay。
+		netstack.SetEmbedded(true)
 	}
 
 	if opts.StatePath != "" {
