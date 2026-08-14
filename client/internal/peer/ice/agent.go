@@ -45,8 +45,9 @@ func NewAgent(ctx context.Context, iFaceDiscover stdnet.ExternalIFaceDiscover, c
 	}
 
 	fac := logging.NewDefaultLoggerFactory()
-	fac.DefaultLogLevel = logging.LogLevelDebug
-	fac.Writer = log.StandardLogger().Writer()
+	// pion internal logs stay off by default (debug noise); enable via the
+	// commented line when diagnosing ICE internals.
+	//fac.Writer = log.StandardLogger().Writer()
 
 	var stunURLs []string
 	for _, u := range config.StunTurn.Load() {
