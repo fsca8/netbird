@@ -63,23 +63,20 @@ func parseDestinationAddress(network, address string) (netip.Addr, error) {
 		return netip.IPv4Unspecified(), nil
 	}
 
+	// IPv4-only resolution: net.DefaultResolver.LookupIPAddr waits for BOTH
+	// A and AAAA. On networks where AAAA queries stall (home routers are a
+	// common offender) every control-plane socket bind would wait 0.5-5s.
+	// LookupNetIP("ip4") never sends an AAAA query — universal, no hosts
+	// file, no admin rights.
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", host)
 	if err != nil || len(ips) == 0 {
 		return netip.Addr{}, fmt.Errorf("resolve destination %s: %w", host, err)
 	}
 
-	dest, ok := netip.AddrFromSlice(ips[0].IP)
-	if !ok {
-		return netip.Addr{}, fmt.Errorf("convert IP %v to netip.Addr", ips[0].IP)
-	}
-
-	if ips[0].Zone != "" {
-		dest = dest.WithZone(ips[0].Zone)
-	}
-
+	dest := ips[0]
 	return dest, nil
 }
 

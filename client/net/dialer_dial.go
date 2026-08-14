@@ -19,6 +19,18 @@ import (
 func (d *Dialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	log.Debugf("Dialing %s %s", network, address)
 
+	// IPv4 pre-resolution: net.Dialer's internal resolver waits for both A
+	// and AAAA. On networks where AAAA queries stall (home routers are a
+	// common offender) every control-plane dial (relay ws, mgmt fallbacks)
+	// would wait 0.5-5s. Resolving the host to an IPv4 up front means the
+	// Dialer receives an IP and never touches the resolver; the Control
+	// callback (applyUnicastIFToSocket) also skips DNS for IP destinations.
+	if host, port, err := net.SplitHostPort(address); err == nil && net.ParseIP(host) == nil {
+		if ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", host); err == nil && len(ips) > 0 {
+			address = net.JoinHostPort(ips[0].String(), port)
+		}
+	}
+
 	if CustomRoutingDisabled() || AdvancedRouting() {
 		return d.Dialer.DialContext(ctx, network, address)
 	}

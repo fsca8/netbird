@@ -23,7 +23,12 @@ import (
 )
 
 const (
-	dnsTimeout     = 5 * time.Second
+	dnsTimeout = 5 * time.Second
+	// aaaaWarmupTimeout caps the AAAA lookup inside AddDomain (warmup).
+	// AAAA queries stall 0.5-5s on many home routers; the warmup runs
+	// synchronously at engine startup, so a slow AAAA would delay the start.
+	// Client AAAA queries (lookupRecords) keep the full dnsTimeout.
+	aaaaWarmupTimeout = 1 * time.Second
 	defaultTTL     = 300 * time.Second
 	refreshBackoff = 30 * time.Second
 
@@ -184,13 +189,24 @@ func (m *Resolver) continueToNext(w dns.ResponseWriter, r *dns.Msg) {
 // entry for that qtype. When one family hard-errors while the other succeeds,
 // the resolved family is still cached but AddDomain returns an error so the
 // caller retries the incomplete resolve rather than treating it as complete.
+//
+// The AAAA warmup lookup is given a short timeout: AAAA queries stall
+// 0.5-5s on many home routers and this path runs synchronously at engine
+// startup (PopulateFromConfig), so a slow AAAA would drag out the start.
+// Timing out just marks the family failed — the partial-failure retry logic
+// re-resolves it on a later sync. Client AAAA queries are served on demand
+// by lookupRecords with the full timeout and are unaffected.
 func (m *Resolver) AddDomain(ctx context.Context, d domain.Domain) error {
 	dnsName := strings.ToLower(dns.Fqdn(d.PunycodeString()))
 
 	ctx, cancel := context.WithTimeout(ctx, dnsTimeout)
 	defer cancel()
 
-	aRecords, aaaaRecords, errA, errAAAA := m.lookupBoth(ctx, d, dnsName)
+	aRecords, errA := m.lookupFamily(ctx, d, dnsName, dns.TypeA)
+
+	aaaaCtx, aaaaCancel := context.WithTimeout(ctx, aaaaWarmupTimeout)
+	aaaaRecords, errAAAA := m.lookupFamily(aaaaCtx, d, dnsName, dns.TypeAAAA)
+	aaaaCancel()
 
 	if errA != nil && errAAAA != nil {
 		return fmt.Errorf("resolve %s: %w", d.SafeString(), errors.Join(errA, errAAAA))
@@ -205,10 +221,9 @@ func (m *Resolver) AddDomain(ctx context.Context, d domain.Domain) error {
 
 	now := time.Now()
 	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
 	m.applyFamilyRecords(dnsName, dns.TypeA, aRecords, errA, now)
 	m.applyFamilyRecords(dnsName, dns.TypeAAAA, aaaaRecords, errAAAA, now)
+	m.mutex.Unlock()
 
 	log.Debugf("added/updated domain=%s with %d A records and %d AAAA records",
 		d.SafeString(), len(aRecords), len(aaaaRecords))
@@ -329,26 +344,21 @@ func (m *Resolver) markRefreshFailed(question dns.Question, expected *cachedReco
 	return c.consecFailures
 }
 
-// lookupBoth resolves A and AAAA via chain or OS. Per-family errors let
-// callers tell records, NODATA (nil err, no records), and failure apart.
-func (m *Resolver) lookupBoth(ctx context.Context, d domain.Domain, dnsName string) (aRecords, aaaaRecords []dns.RR, errA, errAAAA error) {
+// lookupFamily resolves a single family (A or AAAA) via chain or OS.
+func (m *Resolver) lookupFamily(ctx context.Context, d domain.Domain, dnsName string, qtype uint16) ([]dns.RR, error) {
 	m.mutex.RLock()
 	chain := m.chain
 	maxPriority := m.chainMaxPriority
 	m.mutex.RUnlock()
 
 	if chain != nil && chain.HasRootHandlerAtOrBelow(maxPriority) {
-		aRecords, errA = m.lookupViaChain(ctx, chain, maxPriority, dnsName, dns.TypeA)
-		aaaaRecords, errAAAA = m.lookupViaChain(ctx, chain, maxPriority, dnsName, dns.TypeAAAA)
-		return
+		return m.lookupViaChain(ctx, chain, maxPriority, dnsName, qtype)
 	}
 
 	// TODO: drop once every supported OS registers a fallback resolver. Safe
 	// today: no root handler at priority ≤ PriorityUpstream means NetBird is
 	// not the system resolver, so net.DefaultResolver will not loop back.
-	aRecords, errA = m.osLookup(ctx, d, dnsName, dns.TypeA)
-	aaaaRecords, errAAAA = m.osLookup(ctx, d, dnsName, dns.TypeAAAA)
-	return
+	return m.osLookup(ctx, d, dnsName, qtype)
 }
 
 // lookupRecords resolves a single record type via chain or OS. The OS branch

@@ -321,7 +321,7 @@ func TestResolver_NoRootHandler_SkipsChain(t *testing.T) {
 	// real network call in CI.
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
-	_, _, _, _ = r.lookupBoth(ctx, domain.Domain("mgmt.example.com"), "mgmt.example.com.")
+	_, _ = r.lookupFamily(ctx, domain.Domain("mgmt.example.com"), "mgmt.example.com.", dns.TypeA)
 
 	assert.Equal(t, 0, chain.callCount("mgmt.example.com.", dns.TypeA),
 		"chain must not be used when no root handler is registered at the bound priority")

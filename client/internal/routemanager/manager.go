@@ -705,7 +705,11 @@ func isRouteSupported(route *route.Route) bool {
 	return true
 }
 
-// resolveURLsToIPs takes a slice of URLs, resolves them to IP addresses and returns a slice of IPs.
+// resolveURLsToIPs takes a slice of URLs, resolves them to IPv4 addresses and
+// returns a slice of IPs. IPv4-only on purpose: net.LookupIP waits for both A
+// and AAAA, and on networks where AAAA queries stall (home routers are a
+// common offender) Routing setup would block 0.5-5s per URL. LookupNetIP
+// ("ip4") never sends an AAAA query.
 func resolveURLsToIPs(urls []string) []net.IP {
 	var ips []net.IP
 	for _, rawurl := range urls {
@@ -714,12 +718,16 @@ func resolveURLsToIPs(urls []string) []net.IP {
 			log.Errorf("Failed to parse url %s: %v", rawurl, err)
 			continue
 		}
-		ipAddrs, err := net.LookupIP(u.Hostname())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ipAddrs, err := net.DefaultResolver.LookupNetIP(ctx, "ip4", u.Hostname())
+		cancel()
 		if err != nil {
 			log.Errorf("Failed to resolve host %s: %v", u.Hostname(), err)
 			continue
 		}
-		ips = append(ips, ipAddrs...)
+		for _, ip := range ipAddrs {
+			ips = append(ips, net.IP(ip.AsSlice()))
+		}
 	}
 	return ips
 }
