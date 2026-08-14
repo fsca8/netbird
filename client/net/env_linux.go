@@ -55,8 +55,9 @@ func checkAdvancedRoutingSupport() bool {
 		// envCustomRoutingDisabled disables the custom dialers.
 		// There is no point in using advanced routing without those, as they set up fwmarks on the sockets.
 		CustomRoutingDisabled() ||
-		// netstack mode doesn't need routing at all
-		netstack.IsEnabled() {
+		// netstack mode doesn't need routing at all (except when embedded in a host
+		// app, where the control plane must bypass the host's TUN)
+		(netstack.IsEnabled() && !netstack.IsEmbedded()) {
 
 		log.Info("advanced routing has been requested to be disabled")
 		return false

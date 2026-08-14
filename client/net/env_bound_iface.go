@@ -38,7 +38,7 @@ func checkAdvancedRoutingSupport() bool {
 		log.Infof("advanced routing disabled: legacy routing requested via %s", envUseLegacyRouting)
 		return false
 	}
-	if netstack.IsEnabled() {
+	if netstack.IsEnabled() && !netstack.IsEmbedded() {
 		log.Info("advanced routing disabled: netstack mode is enabled")
 		return false
 	}
