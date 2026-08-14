@@ -18,7 +18,7 @@ const (
 // This will fall back to the operation mode before the exit node functionality was implemented.
 // In particular exclusion routes won't be set up and all dialers and listeners will use net.Dial and net.Listen, respectively.
 func CustomRoutingDisabled() bool {
-	if netstack.IsEnabled() {
+	if netstack.IsEnabled() && !netstack.IsEmbedded() {
 		return true
 	}
 
