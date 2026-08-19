@@ -53,12 +53,16 @@ func NewNetWithDiscover(ctx context.Context, iFaceDiscover ExternalIFaceDiscover
 		interfaceFilter: InterfaceFilter(disallowList),
 		ctx:             ctx,
 	}
-	// current ExternalIFaceDiscover implement in android-client https://github.dev/netbirdio/android-client
-	// so in android cli use pionDiscover
-	if netstack.IsEnabled() {
+	// 外部 discoverer(Android ConnectivityManager / java NetworkInterface 实现)
+	// 永远优先: 嵌入模式(netstack.IsEnabled)下 Android 的 netlink 被 SELinux
+	// 禁止, 标准库 net.Interfaces()/Addrs() 必然 EPERM → ICE 无 host 候选 →
+	// 全走 relay。只有外部 discoverer 为空时才回退到标准库枚举。
+	if iFaceDiscover != nil {
+		n.iFaceDiscover = newMobileIFaceDiscover(iFaceDiscover)
+	} else if netstack.IsEnabled() {
 		n.iFaceDiscover = pionDiscover{}
 	} else {
-		n.iFaceDiscover = newMobileIFaceDiscover(iFaceDiscover)
+		n.iFaceDiscover = pionDiscover{}
 	}
 	return n, n.UpdateInterfaces()
 }

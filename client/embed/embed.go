@@ -43,6 +43,24 @@ const (
 // PeerConnStatus is a peer's connection status.
 type PeerConnStatus = peer.ConnStatus
 
+// IFaceDiscover mirrors stdnet.ExternalIFaceDiscover so hosts outside the
+// netbird module (e.g. the sing-box integration) can provide a real Android
+// interface enumerator without importing netbird's internal packages.
+// On Android 11+ SELinux blocks the standard library's netlink-based
+// interface enumeration (EPERM), which makes ICE agent creation fail and
+// forces every connection to relay. Hosts embedding the engine on Android
+// MUST register a ConnectivityManager/NetworkInterface-backed implementation
+// via SetIFaceDiscover before Start().
+type IFaceDiscover interface {
+	IFaces() (string, error)
+}
+
+// SetIFaceDiscover registers a real Android interface discoverer. It must be
+// called before Start(). No-op outside Android embed mode.
+func SetIFaceDiscover(d IFaceDiscover) {
+	internal.SetAndroidIFaceDiscover(d)
+}
+
 // Client manages a netbird embedded client instance.
 type Client struct {
 	deviceName string

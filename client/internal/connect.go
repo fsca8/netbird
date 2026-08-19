@@ -52,8 +52,24 @@ import (
 )
 
 // androidRunOverride is set on Android to inject mobile dependencies
-// when using embed.Client (which calls Run() with empty MobileDependency).
+// into the engine run loop.
 var androidRunOverride func(c *ConnectClient, runningChan chan struct{}, logPath string) error
+
+// androidIFaceDiscover is the real Android interface discoverer injected by
+// the host (e.g. sing-box integration via embed.SetIFaceDiscover). It is
+// consumed only on Android (connect_android_default.go); on other platforms
+// the variable is simply never read. When nil, the engine falls back to
+// noopIFaceDiscover which yields no ICE host candidates (relay only).
+var androidIFaceDiscover stdnet.ExternalIFaceDiscover
+
+// SetAndroidIFaceDiscover registers a real ExternalIFaceDiscover for Android
+// embed mode. Must be called before ConnectClient.Start() from the host.
+// On Android the standard library's netlink-based interface enumeration is
+// blocked by SELinux (EPERM on NetlinkRIB), so without this hook ICE has no
+// host candidates and every connection falls back to relay.
+func SetAndroidIFaceDiscover(d stdnet.ExternalIFaceDiscover) {
+	androidIFaceDiscover = d
+}
 
 type ConnectClient struct {
 	ctx            context.Context
