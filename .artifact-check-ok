@@ -1,0 +1,8 @@
+# 整仓豁免：上游 fork 的历史，产物不是我提交的，改写会与上游分叉。
+#
+# 具体是 netbirdio/netbird 上游自己提交过的构建产物（netbird-server 62MB、
+# proxy/proxy、ui、migrate-idp、browser/assets/tun.wasm 等）。这些 blob 在
+# 公开的上游仓库里本来就有，删本地历史没有任何意义，还会让 fork 与上游分叉。
+#
+# 注意：本仓库自己的脱敏由 `.leak-check-upstream` + check-leaks.sh 盯
+#（只查我在 origin/main 之上引入的对象），这份豁免只管产物审计。
