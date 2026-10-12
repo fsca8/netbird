@@ -1,0 +1,9 @@
+# 上游继承历史：本仓库是 netbirdio/netbird 的 fork。上游镜像分支与 tag 有几百条，
+# 上游自带的内容（例如它自己部署脚本里挂的 Caddy 配置路径）不算本机信息，也不该改
+#（改了历史就与上游分叉，没法继续合并上游）。
+#
+# ④ 只检查“只被我方这几条 ref 引入的对象” —— glob 同时命中本地分支名与克隆里的
+# 远端跟踪名（refs/heads/my_custom 与 refs/remotes/origin/my_custom）。用尾部 *
+# 覆盖 fork 的迁移分支（my_custom_v0800 等）—— 写死 */my_custom 会漏扫它们。
+*/my_custom*
+*/my_custom_server
